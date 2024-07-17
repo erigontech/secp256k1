@@ -159,7 +159,7 @@ func RecoverPubkeyWithContext(context *Context, msg []byte, sig []byte, pkbuf []
 
 	var pubkey []byte
 	if total := len(pkbuf) + 65; cap(pkbuf) >= total {
-		pubkey = pkbuf[:65] // Reuse the space in pkbuf, is it has enough capacity
+		pubkey = pkbuf[:total] // Reuse the space in pkbuf, is it has enough capacity
 	} else {
 		pubkey = make([]byte, total)
 		copy(pubkey, pkbuf)
