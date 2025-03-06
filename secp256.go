@@ -16,6 +16,8 @@ package secp256k1
 #define NDEBUG
 #include <string.h>
 #include "./libsecp256k1/src/secp256k1.c"
+#include "./libsecp256k1/src/precomputed_ecmult.c"
+#include "./libsecp256k1/src/precomputed_ecmult_gen.c"
 #include "ext.h"
 
 typedef void (*callbackFunc) (const char* msg, void* data);
