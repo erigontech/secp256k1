@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be found in
 // the LICENSE file.
 
-// +build !gofuzz cgo
+//go:build !gofuzz && cgo
 
 // Package secp256k1 wraps the bitcoin secp256k1 C library.
 package secp256k1
@@ -11,33 +11,11 @@ package secp256k1
 #cgo CFLAGS: -I./libsecp256k1
 #cgo CFLAGS: -I./libsecp256k1/src/
 
-#ifdef __SIZEOF_INT128__
-#  define HAVE___INT128
-#  define USE_FIELD_5X52
-#  define USE_SCALAR_4X64
-#else
-#  define USE_FIELD_10X26
-#  define USE_SCALAR_8X32
-#endif
-
-#define USE_ENDOMORPHISM
-#define USE_NUM_NONE
-#define USE_FIELD_INV_BUILTIN
-#define USE_SCALAR_INV_BUILTIN
-#if defined(__x86_64__)
-#define USE_FIELD_5X52
-#define USE_SCALAR_4X64
-#define HAVE___INT128
-#else
-#define USE_FIELD_10X26
-#define USE_SCALAR_8X32
-#endif
+#define ENABLE_MODULE_RECOVERY 1
 #define ECMULT_WINDOW_SIZE 15
-#define ECMULT_GEN_PREC_BITS 4
-#define USE_ENDOMORPHISM
 #define NDEBUG
+#include <string.h>
 #include "./libsecp256k1/src/secp256k1.c"
-#include "./libsecp256k1/src/modules/recovery/main_impl.h"
 #include "ext.h"
 
 typedef void (*callbackFunc) (const char* msg, void* data);
@@ -144,12 +122,10 @@ func Sign(msg []byte, seckey []byte) ([]byte, error) {
 // sig must be a 65-byte compact ECDSA signature containing the
 // recovery id as the last element.
 func RecoverPubkey(msg []byte, sig []byte) ([]byte, error) {
-	return RecoverPubkeyWithContext(DefaultContext, msg, sig, nil)
+	return RecoverPubkeyWithContext(DefaultContext, msg, sig)
 }
 
-// RecoverPubkeyWithContext performs recovery and appends the public key to the given pkbuf
-// If there is enough capacity in pkbuf, no extra allocation is made
-func RecoverPubkeyWithContext(context *Context, msg []byte, sig []byte, pkbuf []byte) ([]byte, error) {
+func RecoverPubkeyWithContext(context *Context, msg []byte, sig []byte) ([]byte, error) {
 	if len(msg) != 32 {
 		return nil, ErrInvalidMsgLen
 	}
@@ -157,33 +133,29 @@ func RecoverPubkeyWithContext(context *Context, msg []byte, sig []byte, pkbuf []
 		return nil, err
 	}
 
-	var pubkey []byte
-	if total := len(pkbuf) + 65; cap(pkbuf) >= total {
-		pubkey = pkbuf[:total] // Reuse the space in pkbuf, is it has enough capacity
-	} else {
-		pubkey = make([]byte, total)
-		copy(pubkey, pkbuf)
-	}
-	var (
-		sigdata = (*C.uchar)(unsafe.Pointer(&sig[0]))
-		msgdata = (*C.uchar)(unsafe.Pointer(&msg[0]))
-	)
-	if C.secp256k1_ext_ecdsa_recover(context.context, (*C.uchar)(unsafe.Pointer(&pubkey[len(pkbuf)])), sigdata, msgdata) == 0 {
+	pubkey := new(C.secp256k1_pubkey)
+	sigdata := new(C.secp256k1_ecdsa_recoverable_signature)
+	C.memcpy(unsafe.Pointer(&sigdata.data[0]), unsafe.Pointer(&sig[0]), 65)
+	msgdata := (*C.uchar)(unsafe.Pointer(&msg[0]))
+	if C.secp256k1_ecdsa_recover(context.context, pubkey, sigdata, msgdata) == 0 {
 		return nil, ErrRecoverFailed
 	}
-	return pubkey, nil
+	pubkeySlice := C.GoBytes(unsafe.Pointer(&pubkey.data[0]), 64)
+	return pubkeySlice, nil
 }
 
 // VerifySignature checks that the given pubkey created signature over message.
 // The signature should be in [R || S] format.
 func VerifySignature(pubkey, msg, signature []byte) bool {
-	if len(msg) != 32 || len(signature) != 64 || len(pubkey) == 0 {
+	if len(msg) != 32 || len(signature) != 64 || len(pubkey) != 64 {
 		return false
 	}
-	sigdata := (*C.uchar)(unsafe.Pointer(&signature[0]))
+	sigdata := new(C.secp256k1_ecdsa_signature)
+	C.memcpy(unsafe.Pointer(&sigdata.data[0]), unsafe.Pointer(&signature[0]), 64)
 	msgdata := (*C.uchar)(unsafe.Pointer(&msg[0]))
-	keydata := (*C.uchar)(unsafe.Pointer(&pubkey[0]))
-	return C.secp256k1_ext_ecdsa_verify(context, sigdata, msgdata, keydata, C.size_t(len(pubkey))) != 0
+	keydata := new(C.secp256k1_pubkey)
+	C.memcpy(unsafe.Pointer(&keydata.data[0]), unsafe.Pointer(&pubkey[0]), 64)
+	return C.secp256k1_ecdsa_verify(context, sigdata, msgdata, keydata) != 0
 }
 
 // DecompressPubkey parses a public key in the 33-byte compressed format.
