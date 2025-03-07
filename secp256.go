@@ -124,10 +124,11 @@ func Sign(msg []byte, seckey []byte) ([]byte, error) {
 // sig must be a 65-byte compact ECDSA signature containing the
 // recovery id as the last element.
 func RecoverPubkey(msg []byte, sig []byte) ([]byte, error) {
-	return RecoverPubkeyWithContext(DefaultContext, msg, sig)
+	return RecoverPubkeyWithContext(DefaultContext, msg, sig, nil)
 }
 
-func RecoverPubkeyWithContext(context *Context, msg []byte, sig []byte) ([]byte, error) {
+// If there is enough capacity in pkbuf, no extra allocation is made
+func RecoverPubkeyWithContext(context *Context, msg []byte, sig []byte, pkbuf []byte) ([]byte, error) {
 	if len(msg) != 32 {
 		return nil, ErrInvalidMsgLen
 	}
@@ -135,29 +136,33 @@ func RecoverPubkeyWithContext(context *Context, msg []byte, sig []byte) ([]byte,
 		return nil, err
 	}
 
-	pubkey := new(C.secp256k1_pubkey)
-	sigdata := new(C.secp256k1_ecdsa_recoverable_signature)
-	C.memcpy(unsafe.Pointer(&sigdata.data[0]), unsafe.Pointer(&sig[0]), 65)
-	msgdata := (*C.uchar)(unsafe.Pointer(&msg[0]))
-	if C.secp256k1_ecdsa_recover(context.context, pubkey, sigdata, msgdata) == 0 {
+	var pubkey []byte
+	if total := len(pkbuf) + 65; cap(pkbuf) >= total {
+		pubkey = pkbuf[:total] // Reuse the space in pkbuf, is it has enough capacity
+	} else {
+		pubkey = make([]byte, total)
+		copy(pubkey, pkbuf)
+	}
+	var (
+		sigdata = (*C.uchar)(unsafe.Pointer(&sig[0]))
+		msgdata = (*C.uchar)(unsafe.Pointer(&msg[0]))
+	)
+	if C.secp256k1_ext_ecdsa_recover(context.context, (*C.uchar)(unsafe.Pointer(&pubkey[len(pkbuf)])), sigdata, msgdata) == 0 {
 		return nil, ErrRecoverFailed
 	}
-	pubkeySlice := C.GoBytes(unsafe.Pointer(&pubkey.data[0]), 64)
-	return pubkeySlice, nil
+	return pubkey, nil
 }
 
 // VerifySignature checks that the given pubkey created signature over message.
 // The signature should be in [R || S] format.
 func VerifySignature(pubkey, msg, signature []byte) bool {
-	if len(msg) != 32 || len(signature) != 64 || len(pubkey) != 64 {
+	if len(msg) != 32 || len(signature) != 64 || len(pubkey) == 0 {
 		return false
 	}
-	sigdata := new(C.secp256k1_ecdsa_signature)
-	C.memcpy(unsafe.Pointer(&sigdata.data[0]), unsafe.Pointer(&signature[0]), 64)
+	sigdata := (*C.uchar)(unsafe.Pointer(&signature[0]))
 	msgdata := (*C.uchar)(unsafe.Pointer(&msg[0]))
-	keydata := new(C.secp256k1_pubkey)
-	C.memcpy(unsafe.Pointer(&keydata.data[0]), unsafe.Pointer(&pubkey[0]), 64)
-	return C.secp256k1_ecdsa_verify(context, sigdata, msgdata, keydata) != 0
+	keydata := (*C.uchar)(unsafe.Pointer(&pubkey[0]))
+	return C.secp256k1_ext_ecdsa_verify(context, sigdata, msgdata, keydata, C.size_t(len(pubkey))) != 0
 }
 
 // DecompressPubkey parses a public key in the 33-byte compressed format.
