@@ -127,6 +127,7 @@ func RecoverPubkey(msg []byte, sig []byte) ([]byte, error) {
 	return RecoverPubkeyWithContext(DefaultContext, msg, sig, nil)
 }
 
+// RecoverPubkeyWithContext performs recovery and appends the public key to the given pkbuf
 // If there is enough capacity in pkbuf, no extra allocation is made
 func RecoverPubkeyWithContext(context *Context, msg []byte, sig []byte, pkbuf []byte) ([]byte, error) {
 	if len(msg) != 32 {
