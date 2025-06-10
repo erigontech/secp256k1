@@ -11,13 +11,6 @@ package secp256k1
 #cgo CFLAGS: -I./libsecp256k1
 #cgo CFLAGS: -I./libsecp256k1/src/
 
-#if defined(__x86_64__)
-#define USE_ASM_X86_64 1
-#endif
-#define ECMULT_WINDOW_SIZE 15
-#define COMB_BLOCKS 43
-#define COMB_TEETH 6
-#define NDEBUG
 #define ENABLE_MODULE_RECOVERY 1
 #include "./libsecp256k1/src/secp256k1.c"
 #include "./libsecp256k1/src/precomputed_ecmult.c"
