@@ -11,6 +11,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"io"
+	"math/big"
 	"testing"
 )
 
@@ -234,5 +235,35 @@ func BenchmarkRecover(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		RecoverPubkey(msg, sig)
+	}
+}
+
+func TestIsOnCurveRejectsCoordinatesGeP(t *testing.T) {
+	curve := S256()
+	// Use the generator point
+	gx := curve.Params().Gx
+	gy := curve.Params().Gy
+
+	// Valid point should be on curve
+	if !curve.IsOnCurve(gx, gy) {
+		t.Fatal("generator should be on curve")
+	}
+
+	// x + P should NOT be on curve (coordinates >= P must be rejected)
+	xPlusP := new(big.Int).Add(gx, curve.Params().P)
+	if curve.IsOnCurve(xPlusP, gy) {
+		t.Fatal("IsOnCurve should reject x >= P")
+	}
+
+	// y + P should NOT be on curve
+	yPlusP := new(big.Int).Add(gy, curve.Params().P)
+	if curve.IsOnCurve(gx, yPlusP) {
+		t.Fatal("IsOnCurve should reject y >= P")
+	}
+
+	// Negative coordinates should be rejected
+	negX := new(big.Int).Neg(gx)
+	if curve.IsOnCurve(negX, gy) {
+		t.Fatal("IsOnCurve should reject negative x")
 	}
 }
