@@ -12,6 +12,7 @@ expect the two numbers to relate; see the mapping below.
 
 | module tag | bundled libsecp256k1 |
 |------------|----------------------|
+| v1.4.0     | 0.8.0                |
 | v1.3.0     | 0.7.1                |
 | v1.2.0     | 0.6.0                |
 | v1.1.0     | pre-0.6 amalgamation |
