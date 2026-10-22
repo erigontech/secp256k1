@@ -17,7 +17,9 @@ package secp256k1
 #define ECMULT_WINDOW_SIZE 15
 #define COMB_BLOCKS 43
 #define COMB_TEETH 6
-#define NDEBUG
+#ifndef NDEBUG
+#  define NDEBUG
+#endif
 #define ENABLE_MODULE_RECOVERY 1
 #include "./libsecp256k1/src/secp256k1.c"
 #include "./libsecp256k1/src/precomputed_ecmult.c"
